@@ -257,7 +257,7 @@ mod tests {
     fn test_generate_outputs() {
         use std::fs;
 
-        let out_dir = "temp";
+        let out_dir = "test_files";
         fs::create_dir_all(out_dir).unwrap();
 
         let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();

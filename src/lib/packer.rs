@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn test_create_zip() {
         let dir_source = "test";
-        let dir_target = "temp/stickermaker.wastickers";
+        let dir_target = "test_files/stickermaker.wastickers";
 
         if let Some(parent) = std::path::Path::new(dir_target).parent() {
             let _ = fs::create_dir_all(parent);
