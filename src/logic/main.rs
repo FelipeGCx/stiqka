@@ -12,9 +12,9 @@ use crate::sticker_lib::packer::Packer;
 const MAX_STICKERS: usize = 30;
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
 
-const AUTHOR_FILE_NAME: &str = "temp/author.txt";
-const TITLE_FILE_NAME: &str = "temp/title.txt";
-const ICON_FILE_NAME: &str = "temp/tray_icon.png";
+const AUTHOR_FILE_NAME: &str = "tmp/author.txt";
+const TITLE_FILE_NAME: &str = "tmp/title.txt";
+const ICON_FILE_NAME: &str = "tmp/tray_icon.png";
 const STICKER_IMAGE_FORMAT: &str = "webp";
 
 pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
@@ -25,7 +25,7 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
 
     if let Some(icon_path) = pack_info.icon_path.as_deref() {
         let icon = self::transform_image(icon_path, (96, 96), 16)?;
-        fs::create_dir_all("temp").map_err(|e| e.to_string())?;
+        fs::create_dir_all("tmp").map_err(|e| e.to_string())?;
         icon.save(ICON_FILE_NAME).map_err(|e| e.to_string())?;
     }
 
@@ -93,25 +93,37 @@ fn process_images(folder: &str) {
             Err(_) => continue,
         };
         let path = entry.path();
-        let extension = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if path.is_file() && IMAGE_EXTENSIONS.contains(&extension) {
             let _file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
-            // TODO process image logic
+            todo!("process image logic");
             processed_images.push(path);
         }
         if processed_images.len() > MAX_STICKERS {
             break;
         }
     }
+
+    todo!("remove images wiht user preference");
 }
 
-fn manipulate_image(path: PathBuf){
-    if path.extension() === "webp" {
+fn manipulate_image(path: PathBuf) {
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
+    if extension == "webp" {
+        todo!("just resize image");
+        todo!("save image");
+    }
+
+    if extension == "png" {
+        todo!("check transparency");
+        todo!("crop if has transparency");
+        todo!("transform image");
+        todo!("save image");
+    } else {
+        todo!("transform image");
+        todo!("save image");
     }
 }
 
@@ -145,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_write_file() {
-        let filename = "temp/text.txt";
+        let filename = "tmp/text.txt";
         let sentence = "pruebas";
 
         write_text_file(filename, sentence);
@@ -155,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_extension() {
-        let folder_test = "temp";
+        let folder_test = "tmp";
         for entry in fs::read_dir(folder_test).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
