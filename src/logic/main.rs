@@ -12,24 +12,28 @@ use crate::sticker_lib::packer::Packer;
 const MAX_STICKERS: usize = 30;
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
 
-const AUTHOR_FILE_NAME: &str = "tmp/author.txt";
-const TITLE_FILE_NAME: &str = "tmp/title.txt";
-const ICON_FILE_NAME: &str = "tmp/tray_icon.png";
+const PACK_FOLDER_NAME: &str = "tmp";
+const AUTHOR_FILE_NAME: &str = "author.txt";
+const TITLE_FILE_NAME: &str = "title.txt";
+const ICON_FILE_NAME: &str = "tray_icon.png";
 const STICKER_IMAGE_FORMAT: &str = "webp";
 
 pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
-    // let folder_name = self::generate_name("WSP");
+    let tmp_author_path = PathBuf::from(PACK_FOLDER_NAME).join(AUTHOR_FILE_NAME);
+    let tmp_title_path = PathBuf::from(PACK_FOLDER_NAME).join(TITLE_FILE_NAME);
+    let tmp_icon_path = PathBuf::from(PACK_FOLDER_NAME).join(ICON_FILE_NAME);
 
-    self::write_text_file(AUTHOR_FILE_NAME, &pack_info.author_pack).map_err(|e| e.to_string())?;
-    self::write_text_file(TITLE_FILE_NAME, &pack_info.name_pack).map_err(|e| e.to_string())?;
+    fs::create_dir_all(PACK_FOLDER_NAME).map_err(|e| e.to_string())?;
+
+    self::write_text_file(tmp_author_path, &pack_info.author_pack).map_err(|e| e.to_string())?;
+    self::write_text_file(tmp_title_path, &pack_info.name_pack).map_err(|e| e.to_string())?;
 
     if let Some(icon_path) = pack_info.icon_path.as_deref() {
         let icon = self::transform_image(icon_path, (96, 96), 16)?;
-        fs::create_dir_all("tmp").map_err(|e| e.to_string())?;
-        icon.save(ICON_FILE_NAME).map_err(|e| e.to_string())?;
+        icon.save(tmp_icon_path).map_err(|e| e.to_string())?;
     }
 
-    self::process_images(&pack_info.folder_path);
+    // self::process_images(&pack_info.folder_path);
 
     Ok(("fff").to_string())
 }
@@ -42,7 +46,7 @@ fn generate_name(prefix: &str) -> String {
     format!("{}{}{}", prefix, parts[0], &parts[parts.len() - 1][..3])
 }
 
-fn write_text_file(filename: &str, sentence: &str) -> std::io::Result<()> {
+fn write_text_file(filename: PathBuf, sentence: &str) -> std::io::Result<()> {
     let mut file = File::create(filename)?;
     file.write_all(sentence.as_bytes())?;
     Ok(())
@@ -160,7 +164,7 @@ mod tests {
         let filename = "tmp/text.txt";
         let sentence = "pruebas";
 
-        write_text_file(filename, sentence);
+        write_text_file(filename.into(), sentence).unwrap();
 
         println!("¡Éxito! Archivo generado en: {}", filename);
     }
@@ -174,5 +178,25 @@ mod tests {
 
             println!("{:?}", path.extension());
         }
+    }
+    #[test]
+    fn test_create_pack() {
+        let pack_info = PackInfo {
+            name_pack: "Prueba".to_owned(),
+            author_pack: "FelipeGCx".to_owned(),
+            folder_path: r"assets/test"
+                .to_owned(),
+            icon_path: Some(
+                r"assets/test/5.jpg".to_owned(),
+            ),
+            preserve_images: true,
+        };
+
+        let result = create_pack(pack_info);
+
+        assert!(result.is_ok(), "create_pack falló: {:?}", result);
+        assert!(PathBuf::from(PACK_FOLDER_NAME).join(AUTHOR_FILE_NAME).exists());
+        assert!(PathBuf::from(PACK_FOLDER_NAME).join(TITLE_FILE_NAME).exists());
+        assert!(PathBuf::from(PACK_FOLDER_NAME).join(ICON_FILE_NAME).exists());
     }
 }
