@@ -187,7 +187,7 @@ mod tests {
             folder_path: r"assets/test"
                 .to_owned(),
             icon_path: Some(
-                r"assets/test/5.jpg".to_owned(),
+                r"assets/test/icon.png".to_owned(),
             ),
             preserve_images: true,
         };

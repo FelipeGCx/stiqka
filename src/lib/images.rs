@@ -169,14 +169,14 @@ mod tests {
 
     #[test]
     fn test_load_from_bytes() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/icon.png")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/1.webp")).unwrap();
         assert!(img.width() > 0);
         assert!(img.height() > 0);
     }
 
     #[test]
     fn test_resize() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/icon.png")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/2.png")).unwrap();
         let resized = ImageManipulator::resize(&img, 512, 512);
         assert_eq!(resized.width(), 512);
         assert_eq!(resized.height(), 512);
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_thumbnail() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/3.jpg")).unwrap();
         let (width, height) = (img.width(), img.height());
 
         let thumb = ImageManipulator::thumbnail(&img, 24, 12);
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_crop() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/3.jpg")).unwrap();
         // Image is 48x48, crop 32x32 from (0,0)
         let cropped = ImageManipulator::crop(&img, 0, 0, 32, 32);
         assert_eq!(cropped.width(), 32);
@@ -206,28 +206,28 @@ mod tests {
 
     #[test]
     fn test_grayscale() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let gray = ImageManipulator::grayscale(&img);
         assert!(matches!(gray, DynamicImage::ImageLuma8(_)));
     }
 
     #[test]
     fn test_flip_horizontal() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let flipped = ImageManipulator::flip_horizontal(&img);
         assert!(matches!(flipped, DynamicImage::ImageRgba8(_)));
     }
 
     #[test]
     fn test_flip_vertical() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let flipped = ImageManipulator::flip_vertical(&img);
         assert!(matches!(flipped, DynamicImage::ImageRgba8(_)));
     }
 
     #[test]
     fn test_rotate() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let rotated = ImageManipulator::rotate(&img, 90.0);
         assert!(rotated.width() > 0);
         assert!(rotated.height() > 0);
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_blur() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let blurred = ImageManipulator::blur(&img, 5.0);
         assert!(blurred.width() > 0);
         assert!(blurred.height() > 0);
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_rounded_border() {
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let rounded = ImageManipulator::rounded_border(&img, 8);
         assert_eq!(rounded.width(), img.width());
         assert_eq!(rounded.height(), img.height());
@@ -260,7 +260,7 @@ mod tests {
         let out_dir = "test_files";
         fs::create_dir_all(out_dir).unwrap();
 
-        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/5.jpg")).unwrap();
+        let img = ImageManipulator::load_from_bytes(include_bytes!("../../assets/test/img_test.jpg")).unwrap();
         let icon = ImageManipulator::load_from_bytes(include_bytes!("../../assets/icon.png")).unwrap();
 
         let outputs: [(&str, DynamicImage); 9] = [
