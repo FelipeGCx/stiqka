@@ -10,7 +10,7 @@ use crate::sticker_lib::images::ImageManipulator;
 use crate::sticker_lib::packer::Packer;
 
 const MAX_STICKERS: usize = 30;
-const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif"];
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
 
 const PACK_FOLDER_NAME: &str = "tmp";
 const AUTHOR_FILE_NAME: &str = "author.txt";
