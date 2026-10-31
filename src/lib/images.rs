@@ -1,8 +1,11 @@
 use std::io::Cursor;
 
 use image::codecs::gif::GifDecoder;
-use image::codecs::webp::WebPDecoder;
-use image::{AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageFormat};
+use image::codecs::webp::{WebPDecoder, WebPEncoder};
+use image::{
+    AnimationDecoder, DynamicImage, ExtendedColorType, GenericImageView, ImageBuffer, ImageEncoder,
+    ImageFormat, RgbaImage,
+};
 
 pub struct ImageManipulator;
 
@@ -46,6 +49,126 @@ impl ImageManipulator {
 
     pub fn load_from_path(path: &str) -> Result<DynamicImage, String> {
         image::open(path).map_err(|e| e.to_string())
+    }
+
+    pub fn load_frames(path: &str) -> Result<Vec<(RgbaImage, u32)>, String> {
+        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+
+        let frames = if Self::is_gif(&data) {
+            GifDecoder::new(Cursor::new(data))
+                .map_err(|e| e.to_string())?
+                .into_frames()
+                .collect_frames()
+                .map_err(|e| e.to_string())?
+        } else if Self::is_webp(&data) {
+            WebPDecoder::new(Cursor::new(data))
+                .map_err(|e| e.to_string())?
+                .into_frames()
+                .collect_frames()
+                .map_err(|e| e.to_string())?
+        } else {
+            return Err(format!("formato animado no soportado: {path}"));
+        };
+
+        Ok(frames
+            .into_iter()
+            .map(|frame| {
+                let (numer, denom) = frame.delay().numer_denom_ms();
+                let delay_ms = if denom == 0 { 0 } else { numer / denom };
+                (frame.into_buffer(), delay_ms)
+            })
+            .collect())
+    }
+
+    pub fn encode_animated_webp(
+        frames: &[(RgbaImage, u32)],
+        output_path: &str,
+    ) -> Result<(), String> {
+        let (width, height) = frames
+            .first()
+            .map(|(frame, _)| frame.dimensions())
+            .ok_or_else(|| "la animación no tiene frames".to_string())?;
+
+        if frames
+            .iter()
+            .any(|(frame, _)| frame.dimensions() != (width, height))
+        {
+            return Err("todos los frames deben tener el mismo tamaño".to_string());
+        }
+
+        let mut body = Vec::new();
+
+        let mut vp8x = vec![0x02 | 0x10];
+        vp8x.extend_from_slice(&[0, 0, 0]);
+        vp8x.extend_from_slice(&(width - 1).to_le_bytes()[..3]);
+        vp8x.extend_from_slice(&(height - 1).to_le_bytes()[..3]);
+        Self::write_webp_chunk(&mut body, b"VP8X", &vp8x);
+
+        let mut anim = vec![0, 0, 0, 0];
+        anim.extend_from_slice(&0u16.to_le_bytes());
+        Self::write_webp_chunk(&mut body, b"ANIM", &anim);
+
+        for (frame, delay_ms) in frames {
+            let mut anmf = Vec::new();
+            anmf.extend_from_slice(&[0, 0, 0]);
+            anmf.extend_from_slice(&[0, 0, 0]);
+            anmf.extend_from_slice(&(width - 1).to_le_bytes()[..3]);
+            anmf.extend_from_slice(&(height - 1).to_le_bytes()[..3]);
+            anmf.extend_from_slice(&delay_ms.to_le_bytes()[..3]);
+            anmf.push(0);
+
+            let frame_data = Self::encode_lossless_frame(frame)?;
+            Self::write_webp_chunk(&mut anmf, b"VP8L", &frame_data);
+
+            Self::write_webp_chunk(&mut body, b"ANMF", &anmf);
+        }
+
+        let mut data = Vec::with_capacity(body.len() + 12);
+        data.extend_from_slice(b"RIFF");
+        data.extend_from_slice(&(body.len() as u32 + 4).to_le_bytes());
+        data.extend_from_slice(b"WEBP");
+        data.extend_from_slice(&body);
+
+        std::fs::write(output_path, data).map_err(|e| e.to_string())
+    }
+
+    fn encode_lossless_frame(frame: &RgbaImage) -> Result<Vec<u8>, String> {
+        let mut buffer = Vec::new();
+        WebPEncoder::new_lossless(&mut buffer)
+            .write_image(
+                frame.as_raw(),
+                frame.width(),
+                frame.height(),
+                ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| e.to_string())?;
+
+        if buffer.len() < 20
+            || &buffer[0..4] != b"RIFF"
+            || &buffer[8..12] != b"WEBP"
+            || &buffer[12..16] != b"VP8L"
+        {
+            return Err("no se pudo extraer el frame WebP".to_string());
+        }
+
+        let length = u32::from_le_bytes(buffer[16..20].try_into().unwrap()) as usize;
+        let end = 20 + length;
+
+        if buffer.len() < end {
+            return Err("frame WebP incompleto".to_string());
+        }
+
+        Ok(buffer[20..end].to_vec())
+    }
+
+    fn write_webp_chunk(out: &mut Vec<u8>, tag: &[u8; 4], data: &[u8]) {
+        out.extend_from_slice(tag);
+        out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        out.extend_from_slice(data);
+
+        if data.len() % 2 == 1 {
+            out.push(0);
+        }
     }
 
     pub fn resize(
@@ -358,5 +481,28 @@ mod tests {
 
         assert!(ImageManipulator::is_webp(webp));
         assert!(!ImageManipulator::is_animated(webp).unwrap());
+    }
+
+    #[test]
+    fn test_encode_animated_webp() {
+        std::fs::create_dir_all("test_files").unwrap();
+
+        for (source, output) in [
+            ("assets/test/4_gf.gif", "test_files/animated_gif.webp"),
+            ("assets/test/5_wp.webp", "test_files/animated_webp.webp"),
+        ] {
+            let frames = ImageManipulator::load_frames(source).unwrap();
+            assert!(frames.len() > 1);
+
+            ImageManipulator::encode_animated_webp(&frames, output).unwrap();
+
+            let data = std::fs::read(output).unwrap();
+            let decoder = WebPDecoder::new(Cursor::new(data)).unwrap();
+            assert!(decoder.has_animation());
+
+            let decoded = decoder.into_frames().collect_frames().unwrap();
+            assert_eq!(decoded.len(), frames.len());
+            assert_eq!(decoded[0].buffer().dimensions(), frames[0].0.dimensions());
+        }
     }
 }
