@@ -53,8 +53,13 @@ fn write_text_file(filename: PathBuf, sentence: &str) -> std::io::Result<()> {
 }
 
 fn transform_image(filename: &str, size: (u32, u32), radius: u32) -> Result<DynamicImage, String> {
+    let img = ImageManipulator::load_from_path(filename)?;
+
+    Ok(self::transform_dynamic_image(img, size, radius))
+}
+
+fn transform_dynamic_image(mut img: DynamicImage, size: (u32, u32), radius: u32) -> DynamicImage {
     let img_radius = (size.0 as f32 / 100.0 * radius as f32) as u32;
-    let mut img = ImageManipulator::load_from_path(filename)?;
     let width = img.width();
     let height = img.height();
 
@@ -81,7 +86,7 @@ fn transform_image(filename: &str, size: (u32, u32), radius: u32) -> Result<Dyna
     let x = (size.0 as i64 - rounded.width() as i64) / 2;
     let y = (size.1 as i64 - rounded.height() as i64) / 2;
 
-    Ok(ImageManipulator::compose(&base, &rounded, x, y))
+    ImageManipulator::compose(&base, &rounded, x, y)
 }
 
 fn process_images(folder: &str, preserve_images: bool) -> Result<(), String> {
@@ -136,10 +141,29 @@ fn manipulate_static_image(path: &Path) -> Result<PathBuf, String> {
     Ok(output_path)
 }
 
-fn manipulate_animated_image(_path: &Path) -> Result<PathBuf, String> {
-    // todo!("check gif or webp");
+fn manipulate_animated_image(path: &Path) -> Result<PathBuf, String> {
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| format!("ruta de imagen inválida: {:?}", path))?;
     let file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
     let output_path = PathBuf::from(PACK_FOLDER_NAME).join(file_name);
+
+    let frames = ImageManipulator::load_frames(path_str)?;
+    let transformed_frames: Vec<_> = frames
+        .into_iter()
+        .map(|(frame, delay_ms)| {
+            let image =
+                self::transform_dynamic_image(DynamicImage::ImageRgba8(frame), (512, 512), 8);
+            (image.to_rgba8(), delay_ms)
+        })
+        .collect();
+
+    let output_path_str = output_path
+        .to_str()
+        .ok_or_else(|| "ruta de salida inválida".to_string())?;
+
+    ImageManipulator::encode_animated_webp(&transformed_frames, output_path_str)?;
+
     Ok(output_path)
 }
 
