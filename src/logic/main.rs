@@ -3,7 +3,7 @@ use image::{DynamicImage, ImageBuffer, Rgba};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::models::PackInfo;
 use crate::sticker_lib::images::ImageManipulator;
@@ -29,11 +29,11 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
     self::write_text_file(tmp_title_path, &pack_info.name_pack).map_err(|e| e.to_string())?;
 
     if let Some(icon_path) = pack_info.icon_path.as_deref() {
-        let icon = self::transform_image(icon_path, (96, 96), 16)?;
+        let icon = self::transform_image(icon_path, (96, 96), 50)?;
         icon.save(tmp_icon_path).map_err(|e| e.to_string())?;
     }
 
-    self::process_images(&pack_info.folder_path);
+    self::process_images(&pack_info.folder_path, pack_info.preserve_images)?;
 
     Ok(("fff").to_string())
 }
@@ -84,67 +84,63 @@ fn transform_image(filename: &str, size: (u32, u32), radius: u32) -> Result<Dyna
     Ok(ImageManipulator::compose(&base, &rounded, x, y))
 }
 
-fn process_images(folder: &str) {
+fn process_images(folder: &str, preserve_images: bool) -> Result<(), String> {
     let mut processed_images = Vec::new();
-    let entries = match fs::read_dir(folder) {
-        Ok(entries) => entries,
-        Err(_) => return,
-    };
 
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-        let path = entry.path();
+    for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
+        if processed_images.len() >= MAX_STICKERS {
+            break;
+        }
+
+        let path = entry.map_err(|e| e.to_string())?.path();
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
-        if path.is_file() && IMAGE_EXTENSIONS.contains(&extension) {
-            let _file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
-            if self::is_animated(path) {
-                todo!("proccess animated sticker logic")
-            } else {
-                todo!("process static sticker logic");
-            };
-            processed_images.push(path);
+        if !path.is_file() || !IMAGE_EXTENSIONS.contains(&extension) {
+            continue;
         }
-        if processed_images.len() > MAX_STICKERS {
-            break;
+
+        if self::is_animated(&path) {
+            self::manipulate_animated_image(&path)?;
+        } else {
+            self::manipulate_static_image(&path)?;
+        }
+
+        processed_images.push(path);
+    }
+
+    if !preserve_images {
+        for image in processed_images {
+            fs::remove_file(image).map_err(|e| e.to_string())?;
         }
     }
 
-    todo!("remove images wiht user preference");
+    Ok(())
 }
 
-fn is_animated(path: PathBuf) -> bool {
+fn is_animated(path: &Path) -> bool {
     path.to_str()
         .and_then(|p| ImageManipulator::is_animated_path(p).ok())
         .unwrap_or(false)
 }
 
-fn manipulate_static_image(path: PathBuf) {
-    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+fn manipulate_static_image(path: &Path) -> Result<PathBuf, String> {
+    let file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
+    let output_path = PathBuf::from(PACK_FOLDER_NAME).join(file_name);
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| format!("ruta de imagen inválida: {:?}", path))?;
 
-    if extension == "webp" {
-        todo!("just resize image");
-        todo!("save image");
-    }
+    let img = self::transform_image(path_str, (512, 512), 8)?;
+    img.save(&output_path).map_err(|e| e.to_string())?;
 
-    if extension == "png" {
-        todo!("check transparency");
-        todo!("crop if has transparency");
-        todo!("transform image");
-        todo!("save image");
-    } else {
-        todo!("transform image");
-        todo!("save image");
-    }
+    Ok(output_path)
 }
 
-fn manipulate_animated_image(path: PathBuf) {
-    todo!("check gif or webp");
-    todo!("transform gif");
-    todo!("transform webp");
+fn manipulate_animated_image(_path: &Path) -> Result<PathBuf, String> {
+    // todo!("check gif or webp");
+    let file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
+    let output_path = PathBuf::from(PACK_FOLDER_NAME).join(file_name);
+    Ok(output_path)
 }
 
 #[macro_export]
