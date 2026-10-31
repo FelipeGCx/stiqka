@@ -1,8 +1,45 @@
-use image::{DynamicImage, ImageBuffer, GenericImageView, ImageFormat};
+use std::io::Cursor;
+
+use image::codecs::gif::GifDecoder;
+use image::codecs::webp::WebPDecoder;
+use image::{AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageFormat};
 
 pub struct ImageManipulator;
 
 impl ImageManipulator {
+    pub fn is_gif(data: &[u8]) -> bool {
+        data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a")
+    }
+
+    pub fn is_webp(data: &[u8]) -> bool {
+        data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP"
+    }
+
+    pub fn is_animated_gif(data: &[u8]) -> Result<bool, String> {
+        let decoder = GifDecoder::new(Cursor::new(data)).map_err(|e| e.to_string())?;
+        Ok(decoder.into_frames().take(2).count() > 1)
+    }
+
+    pub fn is_animated_webp(data: &[u8]) -> Result<bool, String> {
+        let decoder = WebPDecoder::new(Cursor::new(data)).map_err(|e| e.to_string())?;
+        Ok(decoder.has_animation())
+    }
+
+    pub fn is_animated(data: &[u8]) -> Result<bool, String> {
+        if Self::is_gif(data) {
+            Self::is_animated_gif(data)
+        } else if Self::is_webp(data) {
+            Self::is_animated_webp(data)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn is_animated_path(path: &str) -> Result<bool, String> {
+        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+        Self::is_animated(&data)
+    }
+
     pub fn load_from_bytes(data: &[u8]) -> Result<DynamicImage, String> {
         image::load_from_memory(data).map_err(|e| e.to_string())
     }
@@ -156,6 +193,7 @@ impl ImageManipulator {
             ImageFormat::Png => "PNG",
             ImageFormat::Jpeg => "JPEG",
             ImageFormat::WebP => "WEBP",
+            ImageFormat::Gif => "GIF",
             ImageFormat::Bmp => "BMP",
             ImageFormat::Ico => "ICO",
             _ => "Unknown",
@@ -284,5 +322,41 @@ mod tests {
     fn test_format_name() {
         assert_eq!(ImageManipulator::format_name(ImageFormat::Png), "PNG");
         assert_eq!(ImageManipulator::format_name(ImageFormat::Jpeg), "JPEG");
+        assert_eq!(ImageManipulator::format_name(ImageFormat::Gif), "GIF");
+    }
+
+    #[test]
+    fn test_detect_gif() {
+        let data = include_bytes!("../../assets/test/4_gf.gif");
+        assert!(ImageManipulator::is_gif(data));
+        assert!(!ImageManipulator::is_webp(data));
+        assert!(ImageManipulator::is_animated_gif(data).unwrap());
+        assert!(ImageManipulator::is_animated(data).unwrap());
+    }
+
+    #[test]
+    fn test_detect_animated_webp() {
+        let data = include_bytes!("../../assets/test/5_wp.webp");
+        assert!(ImageManipulator::is_webp(data));
+        assert!(!ImageManipulator::is_gif(data));
+        assert!(ImageManipulator::is_animated_webp(data).unwrap());
+        assert!(ImageManipulator::is_animated(data).unwrap());
+    }
+
+    #[test]
+    fn test_static_images_are_not_animated() {
+        let png = include_bytes!("../../assets/test/2.png");
+        let jpg = include_bytes!("../../assets/test/3.jpg");
+        let webp = include_bytes!("../../assets/test/1.webp");
+
+        assert!(!ImageManipulator::is_gif(png));
+        assert!(!ImageManipulator::is_webp(png));
+        assert!(!ImageManipulator::is_animated(png).unwrap());
+
+        assert!(!ImageManipulator::is_gif(jpg));
+        assert!(!ImageManipulator::is_animated(jpg).unwrap());
+
+        assert!(ImageManipulator::is_webp(webp));
+        assert!(!ImageManipulator::is_animated(webp).unwrap());
     }
 }
