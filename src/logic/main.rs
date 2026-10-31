@@ -33,7 +33,7 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
         icon.save(tmp_icon_path).map_err(|e| e.to_string())?;
     }
 
-    // self::process_images(&pack_info.folder_path);
+    self::process_images(&pack_info.folder_path);
 
     Ok(("fff").to_string())
 }
@@ -101,7 +101,11 @@ fn process_images(folder: &str) {
 
         if path.is_file() && IMAGE_EXTENSIONS.contains(&extension) {
             let _file_name = format!("{}.{}", self::generate_name("WS"), STICKER_IMAGE_FORMAT);
-            todo!("process image logic");
+            if self::is_animated(path) {
+                todo!("proccess animated sticker logic")
+            } else {
+                todo!("process static sticker logic");
+            };
             processed_images.push(path);
         }
         if processed_images.len() > MAX_STICKERS {
@@ -112,7 +116,13 @@ fn process_images(folder: &str) {
     todo!("remove images wiht user preference");
 }
 
-fn manipulate_image(path: PathBuf) {
+fn is_animated(path: PathBuf) -> bool {
+    path.to_str()
+        .and_then(|p| ImageManipulator::is_animated_path(p).ok())
+        .unwrap_or(false)
+}
+
+fn manipulate_static_image(path: PathBuf) {
     let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
     if extension == "webp" {
@@ -129,6 +139,12 @@ fn manipulate_image(path: PathBuf) {
         todo!("transform image");
         todo!("save image");
     }
+}
+
+fn manipulate_animated_image(path: PathBuf) {
+    todo!("check gif or webp");
+    todo!("transform gif");
+    todo!("transform webp");
 }
 
 #[macro_export]
@@ -184,19 +200,22 @@ mod tests {
         let pack_info = PackInfo {
             name_pack: "Prueba".to_owned(),
             author_pack: "FelipeGCx".to_owned(),
-            folder_path: r"assets/test"
-                .to_owned(),
-            icon_path: Some(
-                r"assets/test/icon.png".to_owned(),
-            ),
+            folder_path: r"assets/test".to_owned(),
+            icon_path: Some(r"assets/test/icon.png".to_owned()),
             preserve_images: true,
         };
 
         let result = create_pack(pack_info);
 
         assert!(result.is_ok(), "create_pack falló: {:?}", result);
-        assert!(PathBuf::from(PACK_FOLDER_NAME).join(AUTHOR_FILE_NAME).exists());
-        assert!(PathBuf::from(PACK_FOLDER_NAME).join(TITLE_FILE_NAME).exists());
-        assert!(PathBuf::from(PACK_FOLDER_NAME).join(ICON_FILE_NAME).exists());
+        assert!(PathBuf::from(PACK_FOLDER_NAME)
+            .join(AUTHOR_FILE_NAME)
+            .exists());
+        assert!(PathBuf::from(PACK_FOLDER_NAME)
+            .join(TITLE_FILE_NAME)
+            .exists());
+        assert!(PathBuf::from(PACK_FOLDER_NAME)
+            .join(ICON_FILE_NAME)
+            .exists());
     }
 }
