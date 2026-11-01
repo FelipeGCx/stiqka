@@ -86,10 +86,14 @@ impl ImageManipulator {
     pub const MIN_FRAME_DELAY_MS: u32 = 42; // 1000 / 24 fps
     pub const MAX_FRAME_DELAY_MS: u32 = 67; // 1000 / 15 fps
 
-    /// Estandariza frames animados para cumplir límites de sticker:
+    /// Estandariza frames animados para cumplir límites de sticker de WhatsApp:
     /// - máximo 50 fotogramas
     /// - duración máxima 3500 ms
     /// - delay por frame entre 42 ms (24 fps) y 67 ms (15 fps)
+    ///
+    /// Devuelve `(imagen, timestamp_ms)` donde `timestamp_ms` es el tiempo
+    /// acumulado desde el inicio de la animación (primer frame en 0), tal como
+    /// lo requiere `WebPAnimEncoderAdd` de libwebp.
     pub fn standardize_animated_frames(
         frames: Vec<(RgbaImage, u32)>,
     ) -> Vec<(RgbaImage, u32)> {
@@ -111,45 +115,53 @@ impl ImageManipulator {
         };
 
         // 2) Clampear cada delay al rango permitido [42, 67] ms
-        let mut adjusted: Vec<(RgbaImage, u32)> = frames
-            .into_iter()
-            .map(|(img, d)| {
-                let d = d.clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS);
-                (img, d)
-            })
+        let mut delays: Vec<u32> = frames
+            .iter()
+            .map(|(_, d)| (*d).clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS))
             .collect();
 
         // 3) Si la duración total excede 3500 ms, escalar proporcionalmente
-        let total: u32 = adjusted.iter().map(|(_, d)| d).sum();
+        let total: u32 = delays.iter().sum();
         if total > Self::MAX_ANIMATED_DURATION_MS {
             let scale = Self::MAX_ANIMATED_DURATION_MS as f64 / total as f64;
-            adjusted = adjusted
-                .into_iter()
-                .map(|(img, d)| {
+            delays = delays
+                .iter()
+                .map(|&d| {
                     let nd = (d as f64 * scale) as u32;
-                    let nd = nd.clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS);
-                    (img, nd)
+                    nd.clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS)
                 })
                 .collect();
 
             // 4) Si aún excede, eliminar frames del final hasta que quepa
-            let total: u32 = adjusted.iter().map(|(_, d)| d).sum();
+            let total: u32 = delays.iter().sum();
             if total > Self::MAX_ANIMATED_DURATION_MS {
                 let mut remaining = Self::MAX_ANIMATED_DURATION_MS;
-                let mut result = Vec::new();
-                for (img, d) in adjusted {
+                let mut result_delays = Vec::new();
+                for &d in &delays {
                     if remaining >= d {
-                        result.push((img, d));
+                        result_delays.push(d);
                         remaining -= d;
                     } else {
                         break;
                     }
                 }
-                adjusted = result;
+                delays = result_delays;
             }
         }
 
-        adjusted
+        // 5) Convertir delays individuales a timestamps acumulativos (ms desde el inicio)
+        let mut timestamps = Vec::with_capacity(delays.len());
+        let mut acc: u32 = 0;
+        for &d in &delays {
+            timestamps.push(acc);
+            acc += d;
+        }
+
+        frames
+            .into_iter()
+            .zip(timestamps.into_iter())
+            .map(|((img, _), ts)| (img, ts))
+            .collect()
     }
 
     pub fn encode_animated_webp(
@@ -190,12 +202,12 @@ impl ImageManipulator {
 
             let mut encoder = AnimEncoder::new(width, height, &config);
 
-            for (frame, delay_ms) in frames {
+            for (frame, timestamp_ms) in frames {
                 let anim_frame = AnimFrame::from_rgba(
                     frame.as_raw(),
                     width,
                     height,
-                    *delay_ms as i32,
+                    *timestamp_ms as i32,
                 );
                 encoder.add_frame(anim_frame);
             }
@@ -575,23 +587,32 @@ mod tests {
         // Máximo 50 frames
         assert!(standardized.len() <= ImageManipulator::MAX_ANIMATED_FRAMES);
 
-        // Cada delay dentro del rango permitido
-        for (_, d) in &standardized {
+        // Primer frame debe tener timestamp 0
+        assert_eq!(standardized.first().unwrap().1, 0);
+
+        // Timestamps estrictamente crecientes
+        for w in standardized.windows(2) {
+            assert!(w[1].1 > w[0].1, "timestamps no crecientes");
+        }
+
+        // Diferencia entre timestamps consecutivos dentro del rango [42, 67] ms
+        for w in standardized.windows(2) {
+            let diff = w[1].1 - w[0].1;
             assert!(
-                *d >= ImageManipulator::MIN_FRAME_DELAY_MS,
-                "delay {} menor al mínimo", d
+                diff >= ImageManipulator::MIN_FRAME_DELAY_MS,
+                "gap {} ms menor al mínimo", diff
             );
             assert!(
-                *d <= ImageManipulator::MAX_FRAME_DELAY_MS,
-                "delay {} mayor al máximo", d
+                diff <= ImageManipulator::MAX_FRAME_DELAY_MS,
+                "gap {} ms mayor al máximo", diff
             );
         }
 
-        // Duración total <= 3500 ms
-        let total: u32 = standardized.iter().map(|(_, d)| d).sum();
+        // Duración total (último timestamp) <= 3500 ms
+        let last_ts = standardized.last().unwrap().1;
         assert!(
-            total <= ImageManipulator::MAX_ANIMATED_DURATION_MS,
-            "duración {} ms excede 3500 ms", total
+            last_ts <= ImageManipulator::MAX_ANIMATED_DURATION_MS,
+            "duración {} ms excede 3500 ms", last_ts
         );
     }
 
@@ -606,8 +627,10 @@ mod tests {
 
         let standardized = ImageManipulator::standardize_animated_frames(frames);
         assert_eq!(standardized.len(), 50);
-        let total: u32 = standardized.iter().map(|(_, d)| d).sum();
-        assert_eq!(total, 3350);
-        assert!(total <= ImageManipulator::MAX_ANIMATED_DURATION_MS);
+        assert_eq!(standardized.first().unwrap().1, 0);
+        // Último timestamp = 49 * 67 = 3283 ms (el último frame empieza en 3283)
+        let last_ts = standardized.last().unwrap().1;
+        assert_eq!(last_ts, 3283);
+        assert!(last_ts <= ImageManipulator::MAX_ANIMATED_DURATION_MS);
     }
 }
