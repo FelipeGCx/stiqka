@@ -1,10 +1,11 @@
 use std::io::Cursor;
+use std::ops::Deref;
 
+use webp::{AnimEncoder, AnimFrame, WebPConfig};
 use image::codecs::gif::GifDecoder;
-use image::codecs::webp::{WebPDecoder, WebPEncoder};
+use image::codecs::webp::WebPDecoder;
 use image::{
-    AnimationDecoder, DynamicImage, ExtendedColorType, GenericImageView, ImageBuffer, ImageEncoder,
-    ImageFormat, RgbaImage,
+    AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Rgba, RgbaImage,
 };
 
 pub struct ImageManipulator;
@@ -80,10 +81,85 @@ impl ImageManipulator {
             .collect())
     }
 
+    pub const MAX_ANIMATED_FRAMES: usize = 50;
+    pub const MAX_ANIMATED_DURATION_MS: u32 = 3500;
+    pub const MIN_FRAME_DELAY_MS: u32 = 42; // 1000 / 24 fps
+    pub const MAX_FRAME_DELAY_MS: u32 = 67; // 1000 / 15 fps
+
+    /// Estandariza frames animados para cumplir límites de sticker:
+    /// - máximo 50 fotogramas
+    /// - duración máxima 3500 ms
+    /// - delay por frame entre 42 ms (24 fps) y 67 ms (15 fps)
+    pub fn standardize_animated_frames(
+        frames: Vec<(RgbaImage, u32)>,
+    ) -> Vec<(RgbaImage, u32)> {
+        if frames.is_empty() {
+            return frames;
+        }
+
+        // 1) Máximo 50 frames: muestreo uniforme si hay más
+        let frames = if frames.len() > Self::MAX_ANIMATED_FRAMES {
+            let step = frames.len() as f64 / Self::MAX_ANIMATED_FRAMES as f64;
+            (0..Self::MAX_ANIMATED_FRAMES)
+                .map(|i| {
+                    let idx = (i as f64 * step) as usize;
+                    frames[idx.min(frames.len() - 1)].clone()
+                })
+                .collect()
+        } else {
+            frames
+        };
+
+        // 2) Clampear cada delay al rango permitido [42, 67] ms
+        let mut adjusted: Vec<(RgbaImage, u32)> = frames
+            .into_iter()
+            .map(|(img, d)| {
+                let d = d.clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS);
+                (img, d)
+            })
+            .collect();
+
+        // 3) Si la duración total excede 3500 ms, escalar proporcionalmente
+        let total: u32 = adjusted.iter().map(|(_, d)| d).sum();
+        if total > Self::MAX_ANIMATED_DURATION_MS {
+            let scale = Self::MAX_ANIMATED_DURATION_MS as f64 / total as f64;
+            adjusted = adjusted
+                .into_iter()
+                .map(|(img, d)| {
+                    let nd = (d as f64 * scale) as u32;
+                    let nd = nd.clamp(Self::MIN_FRAME_DELAY_MS, Self::MAX_FRAME_DELAY_MS);
+                    (img, nd)
+                })
+                .collect();
+
+            // 4) Si aún excede, eliminar frames del final hasta que quepa
+            let total: u32 = adjusted.iter().map(|(_, d)| d).sum();
+            if total > Self::MAX_ANIMATED_DURATION_MS {
+                let mut remaining = Self::MAX_ANIMATED_DURATION_MS;
+                let mut result = Vec::new();
+                for (img, d) in adjusted {
+                    if remaining >= d {
+                        result.push((img, d));
+                        remaining -= d;
+                    } else {
+                        break;
+                    }
+                }
+                adjusted = result;
+            }
+        }
+
+        adjusted
+    }
+
     pub fn encode_animated_webp(
         frames: &[(RgbaImage, u32)],
         output_path: &str,
+        quality: f32,
     ) -> Result<(), String> {
+        const MAX_SIZE: usize = 500_000;
+        let quality = quality.clamp(1.0, 100.0);
+
         let (width, height) = frames
             .first()
             .map(|(frame, _)| frame.dimensions())
@@ -96,79 +172,51 @@ impl ImageManipulator {
             return Err("todos los frames deben tener el mismo tamaño".to_string());
         }
 
-        let mut body = Vec::new();
+        // Se respeta el tamaño original (p. ej. 512×512). Nunca se escala.
+        // Compresión lossy real con libwebp (VP8), probando calidades
+        // descendentes hasta que quepa bajo 500 KB.
+        let qualities: &[f32] = &[60.0, 50.0, 40.0, 30.0, 20.0, 10.0];
+        let mut best: Option<Vec<u8>> = None;
 
-        let mut vp8x = vec![0x02 | 0x10];
-        vp8x.extend_from_slice(&[0, 0, 0]);
-        vp8x.extend_from_slice(&(width - 1).to_le_bytes()[..3]);
-        vp8x.extend_from_slice(&(height - 1).to_le_bytes()[..3]);
-        Self::write_webp_chunk(&mut body, b"VP8X", &vp8x);
+        for &q in qualities {
+            if q > quality {
+                continue;
+            }
 
-        let mut anim = vec![0, 0, 0, 0];
-        anim.extend_from_slice(&0u16.to_le_bytes());
-        Self::write_webp_chunk(&mut body, b"ANIM", &anim);
+            let mut config = WebPConfig::new().map_err(|_| "WebPConfig init failed".to_string())?;
+            config.lossless = 0;
+            config.alpha_compression = 1;
+            config.quality = q;
 
-        for (frame, delay_ms) in frames {
-            let mut anmf = Vec::new();
-            anmf.extend_from_slice(&[0, 0, 0]);
-            anmf.extend_from_slice(&[0, 0, 0]);
-            anmf.extend_from_slice(&(width - 1).to_le_bytes()[..3]);
-            anmf.extend_from_slice(&(height - 1).to_le_bytes()[..3]);
-            anmf.extend_from_slice(&delay_ms.to_le_bytes()[..3]);
-            anmf.push(0);
+            let mut encoder = AnimEncoder::new(width, height, &config);
 
-            let frame_data = Self::encode_lossless_frame(frame)?;
-            Self::write_webp_chunk(&mut anmf, b"VP8L", &frame_data);
+            for (frame, delay_ms) in frames {
+                let anim_frame = AnimFrame::from_rgba(
+                    frame.as_raw(),
+                    width,
+                    height,
+                    *delay_ms as i32,
+                );
+                encoder.add_frame(anim_frame);
+            }
 
-            Self::write_webp_chunk(&mut body, b"ANMF", &anmf);
+            let webp_memory = encoder.encode();
+            let bytes: Vec<u8> = webp_memory.deref().to_vec();
+
+            if bytes.len() <= MAX_SIZE {
+                return std::fs::write(output_path, &bytes).map_err(|e| e.to_string());
+            }
+
+            if best.is_none() || bytes.len() < best.as_ref().unwrap().len() {
+                best = Some(bytes);
+            }
         }
 
-        let mut data = Vec::with_capacity(body.len() + 12);
-        data.extend_from_slice(b"RIFF");
-        data.extend_from_slice(&(body.len() as u32 + 4).to_le_bytes());
-        data.extend_from_slice(b"WEBP");
-        data.extend_from_slice(&body);
-
-        std::fs::write(output_path, data).map_err(|e| e.to_string())
-    }
-
-    fn encode_lossless_frame(frame: &RgbaImage) -> Result<Vec<u8>, String> {
-        let mut buffer = Vec::new();
-        WebPEncoder::new_lossless(&mut buffer)
-            .write_image(
-                frame.as_raw(),
-                frame.width(),
-                frame.height(),
-                ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| e.to_string())?;
-
-        if buffer.len() < 20
-            || &buffer[0..4] != b"RIFF"
-            || &buffer[8..12] != b"WEBP"
-            || &buffer[12..16] != b"VP8L"
-        {
-            return Err("no se pudo extraer el frame WebP".to_string());
+        if let Some(bytes) = best {
+            return std::fs::write(output_path, &bytes).map_err(|e| e.to_string());
         }
 
-        let length = u32::from_le_bytes(buffer[16..20].try_into().unwrap()) as usize;
-        let end = 20 + length;
-
-        if buffer.len() < end {
-            return Err("frame WebP incompleto".to_string());
-        }
-
-        Ok(buffer[20..end].to_vec())
-    }
-
-    fn write_webp_chunk(out: &mut Vec<u8>, tag: &[u8; 4], data: &[u8]) {
-        out.extend_from_slice(tag);
-        out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        out.extend_from_slice(data);
-
-        if data.len() % 2 == 1 {
-            out.push(0);
-        }
+        Err("no se pudo comprimir la animación por debajo de 500 KB sin escalar".to_string())
     }
 
     pub fn resize(
@@ -494,15 +542,72 @@ mod tests {
             let frames = ImageManipulator::load_frames(source).unwrap();
             assert!(frames.len() > 1);
 
-            ImageManipulator::encode_animated_webp(&frames, output).unwrap();
+            ImageManipulator::encode_animated_webp(&frames, output, 60.0).unwrap();
 
             let data = std::fs::read(output).unwrap();
+            let size_kb = data.len() as f64 / 1024.0;
             let decoder = WebPDecoder::new(Cursor::new(data)).unwrap();
             assert!(decoder.has_animation());
 
             let decoded = decoder.into_frames().collect_frames().unwrap();
             assert_eq!(decoded.len(), frames.len());
-            assert_eq!(decoded[0].buffer().dimensions(), frames[0].0.dimensions());
+            let (dw, dh) = decoded[0].buffer().dimensions();
+            let (sw, sh) = frames[0].0.dimensions();
+            assert!(dw > 0 && dh > 0);
+            assert_eq!(dw, sw, "dimensiones cambiaron: {dw}x{dh} vs {sw}x{sh}");
+            assert_eq!(dh, sh, "dimensiones cambiaron: {dw}x{dh} vs {sw}x{sh}");
+            assert!(size_kb < 500.0, "animación supera 500 KB: {:.1} KB", size_kb);
         }
+    }
+
+    #[test]
+    fn test_standardize_animated_frames() {
+        // Crea 100 frames con delays alternados muy pequeños y muy grandes
+        let mut frames: Vec<(RgbaImage, u32)> = Vec::new();
+        for i in 0..100u32 {
+            let img = RgbaImage::from_pixel(10, 10, Rgba([i as u8, 0, 0, 255]));
+            let delay = if i % 2 == 0 { 10 } else { 200 }; // fuera de rango [42, 67]
+            frames.push((img, delay));
+        }
+
+        let standardized = ImageManipulator::standardize_animated_frames(frames);
+
+        // Máximo 50 frames
+        assert!(standardized.len() <= ImageManipulator::MAX_ANIMATED_FRAMES);
+
+        // Cada delay dentro del rango permitido
+        for (_, d) in &standardized {
+            assert!(
+                *d >= ImageManipulator::MIN_FRAME_DELAY_MS,
+                "delay {} menor al mínimo", d
+            );
+            assert!(
+                *d <= ImageManipulator::MAX_FRAME_DELAY_MS,
+                "delay {} mayor al máximo", d
+            );
+        }
+
+        // Duración total <= 3500 ms
+        let total: u32 = standardized.iter().map(|(_, d)| d).sum();
+        assert!(
+            total <= ImageManipulator::MAX_ANIMATED_DURATION_MS,
+            "duración {} ms excede 3500 ms", total
+        );
+    }
+
+    #[test]
+    fn test_standardize_animated_frames_duration_reduction() {
+        // 50 frames con delay 67 ms = 3350 ms (bajo 3500, no se toca)
+        let mut frames: Vec<(RgbaImage, u32)> = Vec::new();
+        for i in 0..50u32 {
+            let img = RgbaImage::from_pixel(10, 10, Rgba([i as u8, 0, 0, 255]));
+            frames.push((img, 67));
+        }
+
+        let standardized = ImageManipulator::standardize_animated_frames(frames);
+        assert_eq!(standardized.len(), 50);
+        let total: u32 = standardized.iter().map(|(_, d)| d).sum();
+        assert_eq!(total, 3350);
+        assert!(total <= ImageManipulator::MAX_ANIMATED_DURATION_MS);
     }
 }

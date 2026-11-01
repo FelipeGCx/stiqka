@@ -158,11 +158,13 @@ fn manipulate_animated_image(path: &Path) -> Result<PathBuf, String> {
         })
         .collect();
 
+    let standardized = ImageManipulator::standardize_animated_frames(transformed_frames);
+
     let output_path_str = output_path
         .to_str()
         .ok_or_else(|| "ruta de salida inválida".to_string())?;
 
-    ImageManipulator::encode_animated_webp(&transformed_frames, output_path_str)?;
+    ImageManipulator::encode_animated_webp(&standardized, output_path_str, 60.0)?;
 
     Ok(output_path)
 }
