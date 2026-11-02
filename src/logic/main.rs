@@ -17,6 +17,7 @@ const AUTHOR_FILE_NAME: &str = "author.txt";
 const TITLE_FILE_NAME: &str = "title.txt";
 const ICON_FILE_NAME: &str = "tray_icon.png";
 const STICKER_IMAGE_FORMAT: &str = "webp";
+const PACK_EXTENSION: &str = "wastickers";
 
 pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
     let tmp_author_path = PathBuf::from(PACK_FOLDER_NAME).join(AUTHOR_FILE_NAME);
@@ -34,6 +35,8 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
     }
 
     self::process_images(&pack_info.folder_path, pack_info.preserve_images)?;
+
+    self::packer(pack_info)?;
 
     Ok(("fff").to_string())
 }
@@ -167,6 +170,14 @@ fn manipulate_animated_image(path: &Path) -> Result<PathBuf, String> {
     ImageManipulator::encode_animated_webp(&standardized, output_path_str, 60.0)?;
 
     Ok(output_path)
+}
+
+fn packer(pack_info: PackInfo) -> Result<(), String> {
+    let folder_to_pack = PathBuf::from(PACK_FOLDER_NAME);
+    let filename = format!("{}.{}", pack_info.name_pack, PACK_EXTENSION);
+    let output_file_path = PathBuf::from(pack_info.folder_path).join(filename);
+
+    Packer::pack_flat_folder(&folder_to_pack, &output_file_path).map_err(|e| e.to_string())
 }
 
 #[macro_export]
