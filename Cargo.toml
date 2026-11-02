@@ -2,6 +2,7 @@
 name = "Stiqka"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-only"
 
 [dependencies]
 eframe = { version = "0.32", features = ["default_fonts"] }
