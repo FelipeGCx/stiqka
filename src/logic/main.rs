@@ -40,6 +40,8 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
 
     self::packer(pack_info)?;
 
+    fs::remove_dir_all(PACK_FOLDER_NAME).map_err(|e| e.to_string())?;
+
     if !preserve {
         for image in processed_images {
             fs::remove_file(image).map_err(|e| e.to_string())?;
