@@ -34,7 +34,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "Sticker Fast WA",
+        "Stiqka",
         opts,
         Box::new(|cc| Ok(Box::new(StiqkaApp::new(cc)))),
     )
