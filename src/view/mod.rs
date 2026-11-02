@@ -146,6 +146,12 @@ impl eframe::App for StiqkaApp {
             match result {
                 Ok(_path) => {
                     self.show_toast(t("successCreate"), false);
+                    self.name_pack.clear();
+                    self.author_pack.clear();
+                    self.folder_path.clear();
+                    self.icon_path = None;
+                    self.selected_image = None;
+                    self.icon_pack = None;
                 }
                 Err(e) => {
                     self.show_toast(e, true);
