@@ -1,12 +1,12 @@
+use crate::logic::controller::Controller;
+use crate::models::PackInfo;
+use crate::translations::t;
 use eframe::egui;
 use egui::{FontId, RichText};
 use image::GenericImageView;
 use rfd::FileDialog;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use crate::translations::t;
-use crate::logic::controller::Controller;
-use crate::models::PackInfo;
 
 pub struct StiqkaApp {
     name_pack: String,
@@ -45,11 +45,13 @@ impl StiqkaApp {
             ),
             (
                 "Montserrat-Bold",
-                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Bold.ttf").as_slice(),
+                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Bold.ttf")
+                    .as_slice(),
             ),
             (
                 "Montserrat-Black",
-                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Black.ttf").as_slice(),
+                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Black.ttf")
+                    .as_slice(),
             ),
         ];
 
@@ -267,15 +269,23 @@ impl eframe::App for StiqkaApp {
                 let button_enabled = self.is_form_valid() && !is_processing;
 
                 let button = egui::Button::new(
-                    RichText::new(if is_processing { t("creating") } else { t("create_pack") })
-                        .font(FontId::new(
-                            14.0,
-                            egui::FontFamily::Name("Montserrat-Medium".into()),
-                        ))
-                        .color(text_color)
-                        .strong(),
+                    RichText::new(if is_processing {
+                        t("creating")
+                    } else {
+                        t("create_pack")
+                    })
+                    .font(FontId::new(
+                        14.0,
+                        egui::FontFamily::Name("Montserrat-Medium".into()),
+                    ))
+                    .color(text_color)
+                    .strong(),
                 )
-                .fill(if button_enabled { bg_color } else { bg_color.gamma_multiply(0.5) })
+                .fill(if button_enabled {
+                    bg_color
+                } else {
+                    bg_color.gamma_multiply(0.5)
+                })
                 .corner_radius(12.0)
                 .min_size(egui::vec2(160.0, 36.0));
 
@@ -283,10 +293,12 @@ impl eframe::App for StiqkaApp {
 
                 if is_processing {
                     ui.add_space(10.0);
-                    ui.add(egui::ProgressBar::new(progress)
-                        .desired_width(160.0)
-                        .show_percentage()
-                        .animate(true));
+                    ui.add(
+                        egui::ProgressBar::new(progress)
+                            .desired_width(160.0)
+                            .show_percentage()
+                            .animate(true),
+                    );
                 }
 
                 if button_response.clicked() && button_enabled {
@@ -313,30 +325,33 @@ impl eframe::App for StiqkaApp {
         });
 
         if self.show_toast {
+            let screen_width = ctx.screen_rect().width();
+            let toast_width = (screen_width - 20.0).max(200.0);
+
             egui::Window::new("")
-                .fixed_pos(egui::pos2(
-                    ctx.screen_rect().width() - 320.0,
-                    ctx.screen_rect().height() - 100.0,
-                ))
+                .fixed_pos(egui::pos2(10.0, ctx.screen_rect().height() - 100.0))
+                .default_width(toast_width)
                 .collapsible(false)
                 .resizable(false)
                 .title_bar(false)
-                .frame(egui::Frame::window(&ctx.style()).fill(
-                    if self.toast_is_error {
-                        eframe::egui::Color32::from_rgb(220, 50, 50)
-                    } else {
-                        eframe::egui::Color32::from_rgb(50, 180, 50)
-                    }
-                ))
+                .frame(
+                    egui::Frame::window(&ctx.style())
+                        .fill(if self.toast_is_error {
+                            eframe::egui::Color32::from_rgb(220, 50, 50)
+                        } else {
+                            eframe::egui::Color32::from_rgb(0, 150, 136)
+                        })
+                        .outer_margin(egui::Margin::same(10)),
+                )
                 .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add_space(15.0);
-                        ui.label(RichText::new(&self.toast_message)
-                            .color(eframe::egui::Color32::WHITE)
-                            .font(FontId::proportional(14.0)));
-                        ui.add_space(15.0);
+                    ui.set_max_width(toast_width - 20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new(&self.toast_message)
+                                .color(eframe::egui::Color32::WHITE)
+                                .font(FontId::proportional(14.0)),
+                        );
                     });
-                    ui.add_space(10.0);
                 });
         }
     }
