@@ -131,12 +131,13 @@ impl eframe::App for StiqkaApp {
 
         let pack_creator = self.pack_creator.clone();
         let mut creator = pack_creator.lock().unwrap();
-        
+
         let is_processing = creator.is_processing();
-        let current_progress = creator.progress();
-        
+
         if is_processing {
-            creator.update_progress(current_progress + 0.01);
+            if let Some(p) = creator.try_recv_progress() {
+                creator.update_progress(p);
+            }
         }
 
         if let Some(result) = creator.try_take_result() {
@@ -149,6 +150,8 @@ impl eframe::App for StiqkaApp {
                 }
             }
         }
+
+        let progress = creator.progress();
         drop(creator);
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -280,7 +283,7 @@ impl eframe::App for StiqkaApp {
 
                 if is_processing {
                     ui.add_space(10.0);
-                    ui.add(egui::ProgressBar::new(current_progress)
+                    ui.add(egui::ProgressBar::new(progress)
                         .desired_width(160.0)
                         .show_percentage()
                         .animate(true));

@@ -19,7 +19,16 @@ const ICON_FILE_NAME: &str = "tray_icon.png";
 const STICKER_IMAGE_FORMAT: &str = "webp";
 const PACK_EXTENSION: &str = "wastickers";
 
-pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
+pub fn create_pack(
+    pack_info: PackInfo,
+    on_progress: Option<Box<dyn Fn(f32) + Send + Sync>>,
+) -> Result<String, String> {
+    let report = |p: f32| {
+        if let Some(cb) = &on_progress {
+            cb(p.clamp(0.0, 1.0));
+        }
+    };
+
     let tmp_author_path = PathBuf::from(PACK_FOLDER_NAME).join(AUTHOR_FILE_NAME);
     let tmp_title_path = PathBuf::from(PACK_FOLDER_NAME).join(TITLE_FILE_NAME);
     let tmp_icon_path = PathBuf::from(PACK_FOLDER_NAME).join(ICON_FILE_NAME);
@@ -34,11 +43,19 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
         icon.save(tmp_icon_path).map_err(|e| e.to_string())?;
     }
 
-    let processed_images = self::process_images(&pack_info.folder_path)?;
+    report(0.10);
+
+    let processed_images = if let Some(cb) = &on_progress {
+        self::process_images(&pack_info.folder_path, Some(&|p: f32| cb(0.10 + p * 0.70)))?
+    } else {
+        self::process_images(&pack_info.folder_path, None)?
+    };
 
     let preserve = pack_info.preserve_images;
 
     self::packer(pack_info)?;
+
+    report(0.90);
 
     fs::remove_dir_all(PACK_FOLDER_NAME).map_err(|e| e.to_string())?;
 
@@ -47,6 +64,8 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
             fs::remove_file(image).map_err(|e| e.to_string())?;
         }
     }
+
+    report(1.0);
     Ok(("fff").to_string())
 }
 
@@ -101,15 +120,40 @@ fn transform_dynamic_image(mut img: DynamicImage, size: (u32, u32), radius: u32)
     ImageManipulator::compose(&base, &rounded, x, y)
 }
 
-fn process_images(folder: &str) -> Result<Vec<PathBuf>, String> {
-    let mut processed_images = Vec::new();
+fn process_images(
+    folder: &str,
+    on_progress: Option<&dyn Fn(f32)>,
+) -> Result<Vec<PathBuf>, String> {
+    let entries: Vec<_> = fs::read_dir(folder)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .collect();
 
-    for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
+    let total_valid: usize = entries
+        .iter()
+        .filter_map(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|s| s.to_owned())
+        })
+        .filter(|ext| IMAGE_EXTENSIONS.contains(&ext.as_str()))
+        .count()
+        .min(MAX_STICKERS);
+
+    if total_valid == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut processed_images = Vec::new();
+    let mut processed_count: usize = 0;
+
+    for entry in entries {
         if processed_images.len() >= MAX_STICKERS {
             break;
         }
 
-        let path = entry.map_err(|e| e.to_string())?.path();
+        let path = entry.path();
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         if !path.is_file() || !IMAGE_EXTENSIONS.contains(&extension) {
@@ -123,6 +167,12 @@ fn process_images(folder: &str) -> Result<Vec<PathBuf>, String> {
         }
 
         processed_images.push(path);
+        processed_count += 1;
+
+        let p = processed_count as f32 / total_valid as f32;
+        if let Some(cb) = on_progress {
+            cb(p);
+        }
     }
 
     Ok(processed_images)
@@ -241,7 +291,7 @@ mod tests {
             preserve_images: true,
         };
 
-        let result = create_pack(pack_info);
+        let result = create_pack(pack_info, None);
 
         assert!(result.is_ok(), "create_pack falló: {:?}", result);
         assert!(PathBuf::from(PACK_FOLDER_NAME)

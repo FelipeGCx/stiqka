@@ -8,6 +8,7 @@ pub struct Controller {
     is_processing: bool,
     result: Option<Result<String, String>>,
     receiver: Option<mpsc::Receiver<Result<String, String>>>,
+    progress_receiver: Option<mpsc::Receiver<f32>>,
 }
 
 impl Controller {
@@ -17,6 +18,7 @@ impl Controller {
             is_processing: false,
             result: None,
             receiver: None,
+            progress_receiver: None,
         }
     }
 
@@ -25,13 +27,29 @@ impl Controller {
         self.progress = 0.0;
         self.result = None;
 
-        let (sender, receiver) = mpsc::channel();
-        self.receiver = Some(receiver);
+        let (result_tx, result_rx) = mpsc::channel();
+        self.receiver = Some(result_rx);
+
+        let (progress_tx, progress_rx) = mpsc::channel();
+        self.progress_receiver = Some(progress_rx);
+
+        let on_progress = Some(Box::new(move |p: f32| {
+            let _ = progress_tx.send(p);
+        }) as Box<dyn Fn(f32) + Send + Sync>);
 
         thread::spawn(move || {
-            let result = create_pack(pack_info);
-            let _ = sender.send(result);
+            let result = create_pack(pack_info, on_progress);
+            let _ = result_tx.send(result);
         });
+    }
+
+    pub fn try_recv_progress(&mut self) -> Option<f32> {
+        if let Some(rx) = &self.progress_receiver {
+            if let Ok(p) = rx.try_recv() {
+                return Some(p);
+            }
+        }
+        None
     }
 
     pub fn update_progress(&mut self, progress: f32) {
