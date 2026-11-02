@@ -34,10 +34,17 @@ pub fn create_pack(pack_info: PackInfo) -> Result<String, String> {
         icon.save(tmp_icon_path).map_err(|e| e.to_string())?;
     }
 
-    self::process_images(&pack_info.folder_path, pack_info.preserve_images)?;
+    let processed_images = self::process_images(&pack_info.folder_path)?;
+
+    let preserve = pack_info.preserve_images;
 
     self::packer(pack_info)?;
 
+    if !preserve {
+        for image in processed_images {
+            fs::remove_file(image).map_err(|e| e.to_string())?;
+        }
+    }
     Ok(("fff").to_string())
 }
 
@@ -92,7 +99,7 @@ fn transform_dynamic_image(mut img: DynamicImage, size: (u32, u32), radius: u32)
     ImageManipulator::compose(&base, &rounded, x, y)
 }
 
-fn process_images(folder: &str, preserve_images: bool) -> Result<(), String> {
+fn process_images(folder: &str) -> Result<Vec<PathBuf>, String> {
     let mut processed_images = Vec::new();
 
     for entry in fs::read_dir(folder).map_err(|e| e.to_string())? {
@@ -116,13 +123,7 @@ fn process_images(folder: &str, preserve_images: bool) -> Result<(), String> {
         processed_images.push(path);
     }
 
-    if !preserve_images {
-        for image in processed_images {
-            fs::remove_file(image).map_err(|e| e.to_string())?;
-        }
-    }
-
-    Ok(())
+    Ok(processed_images)
 }
 
 fn is_animated(path: &Path) -> bool {
