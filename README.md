@@ -13,6 +13,16 @@ Stiqka (old StickerFast WA) is a desktop app to make sticker packs for WhatsApp,
 
 Unfortunately WhatsApp doesn't provide a native way to import packs from a file, so we depend on third-party app methods to import them. We create the packs with the `.wastickers` extension; as a user, you are free to use the app you prefer. For testing, we use Sticker Maker.
 
+## 💖 Support
+
+If you find Stiqka useful and want to support its development, you can contribute financially:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W4M429YBI3)
+
+- **PayPal:** [https://paypal.me/FelipeGC](https://paypal.me/FelipeGC)
+
+Every contribution helps keep this project free and open source. Thank you!
+
 ## 🚀 Getting started
 
 ### Prerequisites
