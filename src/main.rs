@@ -9,7 +9,7 @@ mod sticker_lib;
 
 use eframe::egui;
 use image;
-use view::SfwaApp;
+use view::StiqkaApp;
 
 fn main() -> eframe::Result<()> {
     let icon_bytes = include_bytes!("../assets/icon.png");
@@ -36,6 +36,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Sticker Fast WA",
         opts,
-        Box::new(|cc| Ok(Box::new(SfwaApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(StiqkaApp::new(cc)))),
     )
 }

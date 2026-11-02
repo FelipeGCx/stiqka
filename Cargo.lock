@@ -3,6 +3,26 @@
 version = 4
 
 [[package]]
+name = "Stiqka"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crc32fast",
+ "directories",
+ "eframe",
+ "egui",
+ "flate2",
+ "image",
+ "once_cell",
+ "rfd",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "webp",
+ "zip",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3573,26 +3593,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
-]
-
-[[package]]
-name = "sfwa"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "crc32fast",
- "directories",
- "eframe",
- "egui",
- "flate2",
- "image",
- "once_cell",
- "rfd",
- "rusqlite",
- "serde",
- "serde_json",
- "webp",
- "zip",
 ]
 
 [[package]]

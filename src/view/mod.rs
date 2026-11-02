@@ -8,7 +8,7 @@ use crate::translations::t;
 use crate::logic::controller::Controller;
 use crate::models::PackInfo;
 
-pub struct SfwaApp {
+pub struct StiqkaApp {
     name_pack: String,
     author_pack: String,
     folder_path: String,
@@ -23,7 +23,7 @@ pub struct SfwaApp {
     toast_timer: f32,
 }
 
-impl SfwaApp {
+impl StiqkaApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut fonts = egui::FontDefinitions::default();
 
@@ -118,7 +118,7 @@ impl SfwaApp {
     }
 }
 
-impl eframe::App for SfwaApp {
+impl eframe::App for StiqkaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint();
 
