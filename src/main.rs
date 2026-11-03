@@ -30,7 +30,10 @@ fn main() -> eframe::Result<()> {
             .with_icon(icon)
             .with_always_on_top()
             .with_resizable(false)
-            .with_inner_size([340.0, 430.0]),
+            .with_maximize_button(false)
+            .with_inner_size([340.0, 430.0])
+            .with_max_inner_size([340.0, 430.0]),
+        persist_window: false, 
         ..Default::default()
     };
     eframe::run_native(
