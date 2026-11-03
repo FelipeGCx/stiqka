@@ -82,18 +82,13 @@ impl StiqkaApp {
                     .as_slice(),
             ),
             (
-                "Montserrat-SemiBold",
-                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-SemiBold.ttf")
+                "NotoSansJP-Regular",
+                include_bytes!("../../assets/fonts/NotoSansJP/static/NotoSansJP-Regular.ttf")
                     .as_slice(),
             ),
             (
-                "Montserrat-Bold",
-                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Bold.ttf")
-                    .as_slice(),
-            ),
-            (
-                "Montserrat-Black",
-                include_bytes!("../../assets/fonts/Montserrat/static/Montserrat-Black.ttf")
+                "NotoSansJP-Medium",
+                include_bytes!("../../assets/fonts/NotoSansJP/static/NotoSansJP-Medium.ttf")
                     .as_slice(),
             ),
         ];
@@ -110,7 +105,10 @@ impl StiqkaApp {
 
         fonts.families.insert(
             egui::FontFamily::Proportional,
-            vec!["Montserrat-Regular".to_owned()],
+            vec![
+                "Montserrat-Regular".to_owned(),
+                "NotoSansJP-Regular".to_owned(),
+            ],
         );
 
         cc.egui_ctx.set_fonts(fonts);
@@ -191,6 +189,7 @@ impl StiqkaApp {
             Language::De => include_bytes!("../../assets/flags/de.png") as &[u8],
             Language::It => include_bytes!("../../assets/flags/it.png") as &[u8],
             Language::Pt => include_bytes!("../../assets/flags/pt.png") as &[u8],
+            Language::Jp => include_bytes!("../../assets/flags/jp.png") as &[u8],
         };
         let texture = Self::load_flag_texture(ctx, bytes, lang.flag_file());
         self.flag_textures.insert(lang, texture.clone());
@@ -290,13 +289,13 @@ impl eframe::App for StiqkaApp {
                     ui.add_sized(
                         [input_folder_width, components_height],
                         egui::TextEdit::singleline(&mut self.folder_path)
-                            .hint_text("Ruta de la carpeta"),
+                            .hint_text(t("folder_path")),
                     );
 
                     if ui
                         .add_sized(
                             [components_height, components_height],
-                            egui::Button::new("..."),
+                            egui::Button::new(t("browse_folder")),
                         )
                         .clicked()
                     {
@@ -500,7 +499,14 @@ impl eframe::App for StiqkaApp {
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                        ui.label(RichText::new("version 1.0.0").font(FontId::proportional(10.0)));
+                        ui.label(
+                            RichText::new(format!(
+                                "{} {}",
+                                t("app_version"),
+                                env!("CARGO_PKG_VERSION")
+                            ))
+                            .font(FontId::proportional(10.0)),
+                        );
                     });
                 });
             });
