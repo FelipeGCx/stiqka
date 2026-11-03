@@ -11,6 +11,7 @@ pub enum Language {
     De,
     It,
     Pt,
+    Jp,
 }
 
 impl Default for Language {
@@ -34,6 +35,7 @@ impl Language {
             Language::De => "de",
             Language::It => "it",
             Language::Pt => "pt",
+            Language::Jp => "jp",
         }
     }
 
@@ -45,6 +47,7 @@ impl Language {
             Language::De => "Deutsch",
             Language::It => "Italiano",
             Language::Pt => "Português",
+            Language::Jp => "日本語",
         }
     }
 
@@ -56,10 +59,11 @@ impl Language {
             Language::De => "de.png",
             Language::It => "it.png",
             Language::Pt => "pt.png",
+            Language::Jp => "jp.png",
         }
     }
 
-    pub const fn all() -> [Language; 6] {
+    pub const fn all() -> [Language; 7] {
         [
             Language::En,
             Language::Es,
@@ -67,6 +71,7 @@ impl Language {
             Language::De,
             Language::It,
             Language::Pt,
+            Language::Jp,
         ]
     }
 
@@ -78,6 +83,7 @@ impl Language {
             "de" => Some(Language::De),
             "it" => Some(Language::It),
             "pt" => Some(Language::Pt),
+            "jp" => Some(Language::Jp),
             _ => None,
         }
     }
@@ -104,6 +110,7 @@ static TRANSLATIONS: Lazy<Mutex<HashMap<Language, HashMap<String, String>>>> =
         load_lang!(Language::De, "de");
         load_lang!(Language::It, "it");
         load_lang!(Language::Pt, "pt");
+        load_lang!(Language::Jp, "jp");
 
         Mutex::new(map)
     });

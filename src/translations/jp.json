@@ -1,0 +1,13 @@
+{
+  "name_pack": "パック名",
+  "name_author": "作者",
+  "max_images": "*最大30画像",
+  "preserve_images": "画像を保持",
+  "create_pack": "パックを作成",
+  "creating": "作成中...",
+  "successCreate": "パックが正常に作成されました",
+  "language": "言語",
+  "folder_path": "フォルダパス",
+  "browse_folder": "...",
+  "app_version": "バージョン"
+}
