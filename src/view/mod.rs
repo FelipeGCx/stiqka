@@ -64,6 +64,7 @@ pub struct StiqkaApp {
     toast_is_error: bool,
     toast_timer: f32,
     flag_textures: HashMap<Language, Option<egui::TextureHandle>>,
+    first_frame: bool,
 }
 
 impl StiqkaApp {
@@ -145,6 +146,7 @@ impl StiqkaApp {
             toast_message: String::new(),
             toast_is_error: false,
             toast_timer: 0.0,
+            first_frame: true,
             flag_textures,
         }
     }
@@ -218,6 +220,24 @@ impl StiqkaApp {
 impl eframe::App for StiqkaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint();
+
+        if self.first_frame {
+            if let Some(screen_rect) = ctx.input(|i| i.viewport().monitor_size) {
+                
+                let window_width = 340.0;
+                let window_height = 430.0;
+                
+                let right_margin = 15.0;
+                let bottom_margin = 110.0; 
+
+                let x = screen_rect.x - window_width - right_margin;
+                let y = screen_rect.y - window_height - bottom_margin;
+
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x, y)));
+                
+                self.first_frame = false;
+            }
+        }
 
         if self.show_toast {
             self.toast_timer -= ctx.input(|i| i.stable_dt);
