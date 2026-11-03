@@ -1,12 +1,52 @@
 use crate::logic::controller::Controller;
 use crate::models::PackInfo;
-use crate::translations::t;
+use crate::translations::{set_language, t, Language};
+use directories::ProjectDirs;
 use eframe::egui;
 use egui::{FontId, RichText};
 use image::GenericImageView;
 use rfd::FileDialog;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+#[derive(Serialize, Deserialize)]
+struct Preferences {
+    language: String,
+}
+
+impl Preferences {
+    fn path() -> Option<PathBuf> {
+        ProjectDirs::from("com", "stiqka", "Stiqka")
+            .map(|proj| proj.config_dir().join("preferences.json"))
+    }
+
+    fn load() -> Self {
+        if let Some(path) = Self::path() {
+            if let Ok(data) = std::fs::read_to_string(&path) {
+                if let Ok(prefs) = serde_json::from_str::<Preferences>(&data) {
+                    return prefs;
+                }
+            }
+        }
+        Preferences {
+            language: "en".to_string(),
+        }
+    }
+
+    fn save(&self) {
+        if let Some(path) = Self::path() {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(self) {
+                let _ = std::fs::write(&path, json);
+            }
+        }
+    }
+}
 
 pub struct StiqkaApp {
     name_pack: String,
@@ -16,11 +56,14 @@ pub struct StiqkaApp {
     icon_path: Option<String>,
     selected_image: Option<egui::TextureHandle>,
     preserve_images: bool,
+    language: Language,
+    show_lang_menu: bool,
     pack_creator: Arc<Mutex<Controller>>,
     show_toast: bool,
     toast_message: String,
     toast_is_error: bool,
     toast_timer: f32,
+    flag_textures: HashMap<Language, Option<egui::TextureHandle>>,
 }
 
 impl StiqkaApp {
@@ -72,6 +115,15 @@ impl StiqkaApp {
 
         cc.egui_ctx.set_fonts(fonts);
 
+        let prefs = Preferences::load();
+        let language = Language::from_code(&prefs.language).unwrap_or(Language::Es);
+        set_language(language);
+
+        let mut flag_textures = HashMap::new();
+        for lang in Language::all() {
+            flag_textures.insert(lang, None);
+        }
+
         Self {
             name_pack: String::new(),
             author_pack: String::new(),
@@ -80,11 +132,14 @@ impl StiqkaApp {
             icon_path: None,
             selected_image: None,
             preserve_images: true,
+            language,
+            show_lang_menu: false,
             pack_creator: Arc::new(Mutex::new(Controller::new())),
             show_toast: false,
             toast_message: String::new(),
             toast_is_error: false,
             toast_timer: 0.0,
+            flag_textures,
         }
     }
 
@@ -103,6 +158,43 @@ impl StiqkaApp {
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &image);
         let texture_name = format!("selected_image_{}", path.display());
         Some(ctx.load_texture(texture_name, color_image, egui::TextureOptions::default()))
+    }
+
+    fn load_flag_texture(
+        ctx: &egui::Context,
+        bytes: &[u8],
+        name: &str,
+    ) -> Option<egui::TextureHandle> {
+        let image = image::load_from_memory(bytes).ok()?;
+        let (w, h) = image.dimensions();
+        let size = w.min(h);
+        let x = (w - size) / 2;
+        let y = (h - size) / 2;
+        let image = image.crop_imm(x, y, size, size).to_rgba8();
+        let size = [size as usize, size as usize];
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &image);
+        Some(ctx.load_texture(name, color_image, egui::TextureOptions::default()))
+    }
+
+    fn flag_texture(
+        &mut self,
+        ctx: &egui::Context,
+        lang: Language,
+    ) -> Option<egui::TextureHandle> {
+        if let Some(Some(cached)) = self.flag_textures.get(&lang).cloned() {
+            return Some(cached);
+        }
+        let bytes: &[u8] = match lang {
+            Language::En => include_bytes!("../../assets/flags/gb.png") as &[u8],
+            Language::Es => include_bytes!("../../assets/flags/es.png") as &[u8],
+            Language::Fr => include_bytes!("../../assets/flags/fr.png") as &[u8],
+            Language::De => include_bytes!("../../assets/flags/de.png") as &[u8],
+            Language::It => include_bytes!("../../assets/flags/it.png") as &[u8],
+            Language::Pt => include_bytes!("../../assets/flags/pt.png") as &[u8],
+        };
+        let texture = Self::load_flag_texture(ctx, bytes, lang.flag_file());
+        self.flag_textures.insert(lang, texture.clone());
+        texture
     }
 
     fn is_form_valid(&self) -> bool {
@@ -161,6 +253,10 @@ impl eframe::App for StiqkaApp {
 
         let progress = creator.progress();
         drop(creator);
+
+        for lang in Language::all() {
+            let _ = Self::flag_texture(self, ctx, lang);
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
@@ -324,8 +420,88 @@ impl eframe::App for StiqkaApp {
                 }
 
                 ui.add_space(26.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                    ui.label(RichText::new("version 1.0.0").font(FontId::proportional(10.0)));
+
+                ui.horizontal(|ui| {
+                    ui.add_space(left_padding);
+
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                        let current_lang = self.language;
+
+                        ui.horizontal(|ui| {
+                            let lang_button = egui::Button::new(
+                                RichText::new(current_lang.name())
+                                    .font(FontId::proportional(10.0)),
+                            );
+                            let lang_response = ui.add(lang_button);
+
+                            if lang_response.clicked() {
+                                self.show_lang_menu = !self.show_lang_menu;
+                            }
+
+                            if self.show_lang_menu {
+                                let rect = lang_response.rect;
+                                let window_width = 150.0;
+                                let item_height = 26.0;
+                                let window_height = (item_height * 6.0) + 16.0;
+                                let pos = egui::pos2(
+                                    (rect.left().max(4.0) - 16.0).max(0.0),
+                                    ((rect.top() - window_height - 4.0).max(4.0) + 34.0).max(0.0),
+                                );
+
+                                let window_response = egui::Window::new(t("language"))
+                                    .fixed_pos(pos)
+                                    .fixed_size([window_width, window_height])
+                                    .collapsible(false)
+                                    .resizable(false)
+                                    .title_bar(false)
+                                    .show(ctx, |ui| {
+                                        for lang in Language::all() {
+                                            ui.horizontal(|ui| {
+                                                if let Some(tex) =
+                                                    self.flag_textures.get(&lang).and_then(|o| o.clone())
+                                                {
+                                                    ui.add(
+                                                            egui::Image::new(&tex)
+                                                            .fit_to_exact_size(egui::vec2(16.0, 16.0))
+                                                            .corner_radius(egui::CornerRadius::same(4)),
+                                                    );
+                                                }
+                                                let selected = self.language == lang;
+                                                if ui
+                                                    .selectable_label(selected, lang.name())
+                                                    .clicked()
+                                                {
+                                                    self.language = lang;
+                                                    set_language(lang);
+                                                    Preferences {
+                                                        language: lang.code().to_string(),
+                                                    }
+                                                    .save();
+                                                    self.show_lang_menu = false;
+                                                }
+                                            });
+                                        }
+                                    });
+
+                                if let Some(inner) = window_response {
+                                    let win_rect = inner.response.rect;
+                                    if ctx.input(|i| i.pointer.any_click()) {
+                                        let click_pos =
+                                            ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default();
+                                        if !win_rect.contains(click_pos)
+                                            && !lang_response.rect.contains(click_pos)
+                                        {
+                                            self.show_lang_menu = false;
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        ui.label(RichText::new("version 1.0.0").font(FontId::proportional(10.0)));
+                    });
                 });
             });
         });
