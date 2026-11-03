@@ -111,6 +111,14 @@ impl StiqkaApp {
             ],
         );
 
+        fonts.families.insert(
+            egui::FontFamily::Name("Medium".into()),
+            vec![
+                "Montserrat-Medium".to_owned(),
+                "NotoSansJP-Regular".to_owned(),
+            ],
+        );
+
         cc.egui_ctx.set_fonts(fonts);
 
         let prefs = Preferences::load();
@@ -174,11 +182,7 @@ impl StiqkaApp {
         Some(ctx.load_texture(name, color_image, egui::TextureOptions::default()))
     }
 
-    fn flag_texture(
-        &mut self,
-        ctx: &egui::Context,
-        lang: Language,
-    ) -> Option<egui::TextureHandle> {
+    fn flag_texture(&mut self, ctx: &egui::Context, lang: Language) -> Option<egui::TextureHandle> {
         if let Some(Some(cached)) = self.flag_textures.get(&lang).cloned() {
             return Some(cached);
         }
@@ -377,7 +381,7 @@ impl eframe::App for StiqkaApp {
                     })
                     .font(FontId::new(
                         14.0,
-                        egui::FontFamily::Name("Montserrat-Medium".into()),
+                        egui::FontFamily::Name("Medium".into()),
                     ))
                     .color(text_color)
                     .strong(),
@@ -428,8 +432,7 @@ impl eframe::App for StiqkaApp {
 
                         ui.horizontal(|ui| {
                             let lang_button = egui::Button::new(
-                                RichText::new(current_lang.name())
-                                    .font(FontId::proportional(10.0)),
+                                RichText::new(current_lang.name()).font(FontId::proportional(10.0)),
                             );
                             let lang_response = ui.add(lang_button);
 
@@ -456,13 +459,19 @@ impl eframe::App for StiqkaApp {
                                     .show(ctx, |ui| {
                                         for lang in Language::all() {
                                             ui.horizontal(|ui| {
-                                                if let Some(tex) =
-                                                    self.flag_textures.get(&lang).and_then(|o| o.clone())
+                                                if let Some(tex) = self
+                                                    .flag_textures
+                                                    .get(&lang)
+                                                    .and_then(|o| o.clone())
                                                 {
                                                     ui.add(
-                                                            egui::Image::new(&tex)
-                                                            .fit_to_exact_size(egui::vec2(16.0, 16.0))
-                                                            .corner_radius(egui::CornerRadius::same(4)),
+                                                        egui::Image::new(&tex)
+                                                            .fit_to_exact_size(egui::vec2(
+                                                                16.0, 16.0,
+                                                            ))
+                                                            .corner_radius(
+                                                                egui::CornerRadius::same(4),
+                                                            ),
                                                     );
                                                 }
                                                 let selected = self.language == lang;
@@ -485,8 +494,9 @@ impl eframe::App for StiqkaApp {
                                 if let Some(inner) = window_response {
                                     let win_rect = inner.response.rect;
                                     if ctx.input(|i| i.pointer.any_click()) {
-                                        let click_pos =
-                                            ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default();
+                                        let click_pos = ctx
+                                            .input(|i| i.pointer.hover_pos())
+                                            .unwrap_or_default();
                                         if !win_rect.contains(click_pos)
                                             && !lang_response.rect.contains(click_pos)
                                         {
