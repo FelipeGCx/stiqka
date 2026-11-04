@@ -19,3 +19,6 @@ flate2 = "1"
 crc32fast = "1"
 zip = "2.3.0"
 webp = "0.3"
+
+[build-dependencies]
+embed-resource = "2.4"
