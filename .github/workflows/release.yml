@@ -76,7 +76,7 @@ jobs:
         run: |
           $package = "Stiqka-${{ matrix.target }}"
           New-Item -ItemType Directory -Force $package
-          Copy-Item "target/${{ matrix.target }}/release/stiqka.exe" "$package/"
+          Copy-Item "target/${{ matrix.target }}/release/Stiqka.exe" "$package/"
           if (Test-Path "assets") {
             Copy-Item "assets" "$package/" -Recurse
           }
@@ -87,7 +87,7 @@ jobs:
         run: |
           PACKAGE="Stiqka-${{ matrix.target }}"
           mkdir -p "$PACKAGE"
-          cp "target/${{ matrix.target }}/release/stiqka" "$PACKAGE/"
+          cp "target/${{ matrix.target }}/release/Stiqka" "$PACKAGE/"
           if [ -d "assets" ]; then
             cp -r assets "$PACKAGE/"
           fi
