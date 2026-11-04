@@ -1,0 +1,118 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: exe
+            archive: zip
+
+          - name: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+            archive: tar.gz
+
+          - name: macOS Apple Silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            ext: ""
+            archive: tar.gz
+
+          - name: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            ext: ""
+            archive: tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libx11-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libegl1-mesa-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-cursor-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $package = "Stiqka-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force $package
+          Copy-Item "target/${{ matrix.target }}/release/stiqka.exe" "$package/"
+          if (Test-Path "assets") {
+            Copy-Item "assets" "$package/" -Recurse
+          }
+          Compress-Archive "$package/*" "$package.zip"
+
+      - name: Package Linux and macOS
+        if: runner.os != 'Windows'
+        run: |
+          PACKAGE="Stiqka-${{ matrix.target }}"
+          mkdir -p "$PACKAGE"
+          cp "target/${{ matrix.target }}/release/stiqka" "$PACKAGE/"
+          if [ -d "assets" ]; then
+            cp -r assets "$PACKAGE/"
+          fi
+          tar -czf "$PACKAGE.tar.gz" "$PACKAGE"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stiqka-${{ matrix.target }}
+          path: Stiqka-${{ matrix.target }}.${{ matrix.archive }}
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
